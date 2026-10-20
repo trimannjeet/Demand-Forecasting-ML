@@ -364,7 +364,6 @@ def prepare_series(
         work[date_column], frequency
     )
 
-    # Aggregate duplicate observations within each period/group.
     keys = ["_period"] + group_columns
     aggregated = (
         work.groupby(keys, dropna=False, as_index=False)[target_column]
@@ -374,9 +373,6 @@ def prepare_series(
         .reset_index(drop=True)
     )
 
-    # Create a complete date index separately for every group.
-    # A missing observation is not necessarily zero sales, so the
-    # caller can pass missing_period_value=None to avoid zero-filling.
     completed_parts = []
 
     grouped = (

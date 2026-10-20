@@ -144,7 +144,6 @@ def _fit_predict(
 
 
 def _holdout_size(length: int, seasonal_period: int) -> int:
-    # Keep enough observations in the training set.
     desired = max(1, seasonal_period)
     return min(desired, max(1, length // 5), length - 2)
 
@@ -168,14 +167,11 @@ def compare_models(
 
     holdout = _holdout_size(len(values), seasonal_period)
 
-    # Use up to three chronological validation folds.
     fold_count = min(
         3,
         max(1, (len(values) - 10) // holdout),
     )
 
-    # Keep the earliest training window at least 8 observations long
-    # whenever the available history allows it.
     while fold_count > 1 and len(values) - fold_count * holdout < 8:
         fold_count -= 1
 
@@ -340,7 +336,6 @@ def forecast_series(
     if not np.isfinite(predictions).all():
         raise RuntimeError("The selected model produced non-finite forecasts.")
 
-    # Sales/demand forecasts should not be negative.
     predictions = np.maximum(predictions, 0.0)
 
     forecast_df = pd.DataFrame({

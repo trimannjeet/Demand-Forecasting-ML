@@ -176,7 +176,6 @@ def money_or_number(value):
     return f"{value:,.2f}"
 
 
-# Sidebar
 with st.sidebar:
     st.markdown("## 📈 DemandIQ")
     st.caption("Demand forecasting & business analytics")
@@ -208,7 +207,6 @@ with st.sidebar:
     st.caption(f"Endpoint: {API_BASE_URL}")
 
 
-# Header
 st.title("Demand Forecasting Workspace")
 st.write(
     "Explore historical demand, compare forecasting models, "
@@ -242,7 +240,6 @@ if not uploaded_file:
     st.stop()
 
 
-# Profile the uploaded file
 try:
     with st.spinner("Inspecting your dataset..."):
         profile_response = requests.post(
@@ -266,7 +263,6 @@ except Exception as exc:
     st.stop()
 
 
-# Dataset overview
 st.subheader("Dataset overview")
 
 metric_cols = st.columns(4)
@@ -288,7 +284,6 @@ with st.expander("Preview uploaded data", expanded=False):
     st.dataframe(df.head(100), use_container_width=True)
 
 
-# Configuration
 suggestions = profile.get("suggestions", {})
 column_names = list(df.columns)
 
@@ -423,7 +418,6 @@ if submitted:
         st.stop()
 
 
-# Results
 forecast_result = st.session_state.get("forecast_response")
 
 if forecast_result:

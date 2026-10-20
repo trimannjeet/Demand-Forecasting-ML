@@ -1,12 +1,10 @@
-# Demand Forecasting & Business Analytics
+# Demand Forecasting Dashboard
 
-An intelligent demand forecasting application that analyzes historical business data, compares time-series forecasting models, and predicts future demand. It helps users explore sales trends, evaluate model performance, and make more informed planning decisions.
+Upload sales history, choose the date and demand fields, and generate forecasts by day, week, or month. The project includes a FastAPI service, a Streamlit dashboard, a React frontend, and a notebook for exploring the forecasting workflow.
 
 ## Project Overview
 
-Demand Forecasting & Business Analytics accepts business datasets in CSV, XLSX, and XLS formats. It profiles uploaded data, suggests date and target columns, prepares time series, evaluates forecasting models, and generates future predictions.
-
-The project includes a **FastAPI backend**, an interactive **Streamlit dashboard**, a **React + TypeScript frontend**, and a Jupyter notebook for exploring the forecasting workflow.
+The app accepts CSV and Excel datasets. It checks the data, helps identify date and demand columns, and forecasts an overall series or separate groups such as stores and products.
 
 ## Key Features
 
