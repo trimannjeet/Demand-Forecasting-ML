@@ -300,9 +300,17 @@ function App() {
       (highest, point) => !highest || point.prediction > highest.prediction ? point : highest,
       null,
     )
+    const comparisonCount = Math.min(result.history?.length ?? 0, result.forecast.length)
+    const recentTotal = comparisonCount
+      ? result.history.slice(-comparisonCount).reduce((sum, point) => sum + Number(point.value), 0)
+      : null
     return {
       series: groupLabel(result.group),
       forecast: forecastTotal,
+      recent: recentTotal,
+      changePercent: recentTotal && recentTotal > 0
+        ? ((forecastTotal - recentTotal) / recentTotal) * 100
+        : null,
       peakDate: peak?.date ?? null,
     }
   }).sort((a, b) => b.forecast - a.forecast), [successful])
@@ -349,7 +357,7 @@ function App() {
       ? ((forecastTotal - recentTotal) / recentTotal) * 100
       : null
 
-    return { changePercent, peak }
+    return { recentTotal, changePercent, peak }
   }, [forecast?.frequency, successful])
 
   const forecastByMonth = useMemo<PeriodValue[]>(() => {
@@ -402,6 +410,8 @@ function App() {
     if (otherTotal > 0) topGroups.push({ series: 'Other groups', value: otherTotal })
     return topGroups
   }, [groupSummary])
+
+  const groupComparison = useMemo(() => groupSummary.slice(0, 8), [groupSummary])
 
   const comparisonPeriods = successful[0]?.horizon ?? 0
   const changePercent = forecastHighlights.changePercent
@@ -751,7 +761,7 @@ function App() {
                 <div>
                   <div className="section-kicker">LATEST RUN <span className="live-tag"><span /> COMPLETE</span></div>
                   <h2>Forecast overview</h2>
-                  <p>{forecast.filename} · {forecast.frequency} predictions · {forecast.rows_dropped.toLocaleString()} records skipped</p>
+                  <p>{forecast.filename} · {forecast.frequency} predictions · {forecast.group_columns.length ? `${successful.length} groups · ` : ''}{forecast.rows_dropped.toLocaleString()} records skipped</p>
                 </div>
                 <button className="button button-secondary" onClick={() => csvDownload('demand_forecast.csv', forecastCsvRows)}><ArrowDownToLine size={15} /> Download CSV</button>
               </div>
@@ -773,9 +783,9 @@ function App() {
                   <span className="kpi-foot">{forecastHighlights.peak ? `${formatCompact(forecastHighlights.peak[1])} ${targetColumn} expected` : 'No peak period available'}</span>
                 </article>
                 <article className="kpi-card">
-                  <div className="kpi-top"><span>{forecast.group_columns.length ? 'Groups forecasted' : 'Forecasts completed'}</span><span className="kpi-icon purple"><Layers3 size={17} /></span></div>
-                  <strong className="kpi-value">{successful.length}<small> / {forecast.series_count}</small></strong>
-                  <span className="kpi-foot">{failed.length ? `${failed.length} need review` : 'All selected forecasts completed'}</span>
+                  <div className="kpi-top"><span>Recent demand</span><span className="kpi-icon purple"><Layers3 size={17} /></span></div>
+                  <strong className="kpi-value">{formatCompact(forecastHighlights.recentTotal)}</strong>
+                  <span className="kpi-foot">Previous {periodCountLabel(comparisonPeriods, forecast.frequency)} · {targetColumn}</span>
                 </article>
               </div>
 
@@ -832,6 +842,33 @@ function App() {
                   </div>
                   <div className="chart-bottom"><span><span className="chart-dot blue-dot" /> Past {forecast.frequency} demand</span><span><span className="chart-dot purple-dot" /> Future {forecast.frequency} demand</span></div>
                 </article>
+                {forecast.group_columns.length > 0 && groupComparison.length > 0 && (
+                  <article className="panel compare-panel">
+                    <div className="panel-heading">
+                      <div><h3>Recent vs expected by group</h3><p>Same number of recent and forecast periods · top groups by expected demand</p></div>
+                      <span className="panel-icon"><Layers3 size={17} /></span>
+                    </div>
+                    <div className="compare-legend">
+                      <span><i className="compare-swatch recent" /> Recent</span>
+                      <span><i className="compare-swatch expected" /> Expected</span>
+                    </div>
+                    <div className="compare-chart">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={groupComparison} layout="vertical" margin={{ top: 4, right: 14, left: 0, bottom: 0 }}>
+                          <CartesianGrid stroke="#222a36" horizontal={false} />
+                          <XAxis type="number" tickFormatter={(value: number) => formatCompact(value)} tick={{ fill: '#798598', fontSize: 9 }} axisLine={false} tickLine={false} />
+                          <YAxis type="category" dataKey="series" width={88} tick={{ fill: '#aab4c3', fontSize: 9 }} axisLine={false} tickLine={false} />
+                          <Tooltip
+                            contentStyle={{ background: '#131a25', border: '1px solid #293446', borderRadius: 9, color: '#edf2fb' }}
+                            formatter={(value, name) => [formatNumber(Number(value)), name === 'recent' ? 'Recent demand' : 'Expected demand']}
+                          />
+                          <Bar dataKey="recent" name="recent" fill="#63a7ff" radius={[0, 4, 4, 0]} barSize={8} />
+                          <Bar dataKey="forecast" name="forecast" fill="#bc8cff" radius={[0, 4, 4, 0]} barSize={8} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </article>
+                )}
               </div>
 
               <div className="visual-grid">
@@ -958,7 +995,9 @@ function App() {
                     </label>
                     <button className="button button-quiet" onClick={() => csvDownload('forecast_summary.csv', groupSummary.map((row) => ({
                       group: row.series,
+                      recent_demand: row.recent,
                       expected_demand: row.forecast,
+                      change_percent: row.changePercent,
                       share_of_total_percent: totalForecast > 0 ? row.forecast / totalForecast * 100 : 0,
                       peak_period: row.peakDate,
                     })))}><ArrowDownToLine size={14} /> Export table</button>
@@ -966,14 +1005,14 @@ function App() {
                 </div>
                 <div className="table-scroll">
                   <table>
-                    <thead><tr><th>Group</th><th>Expected demand</th><th>Share of total</th><th>Peak period</th></tr></thead>
+                    <thead><tr><th>Group</th><th>Recent demand</th><th>Expected demand</th><th>Change</th></tr></thead>
                     <tbody>
                       {paginatedGroupSummary.map((row, index) => (
                         <tr key={row.series}>
                           <td><span className={`table-avatar avatar-${index % 4}`}>{row.series.split(': ').at(-1)?.slice(0, 2).toUpperCase() ?? 'OV'}</span><strong>{row.series}</strong></td>
+                          <td className="number-cell">{row.recent == null ? '—' : formatNumber(row.recent)}</td>
                           <td className="number-cell">{formatNumber(row.forecast)}</td>
-                          <td className="number-cell">{totalForecast > 0 ? `${(row.forecast / totalForecast * 100).toFixed(1)}%` : '—'}</td>
-                          <td>{formatDateLabel(row.peakDate)}</td>
+                          <td className={`number-cell ${row.changePercent != null && row.changePercent < 0 ? 'change-negative' : 'change-positive'}`}>{row.changePercent == null ? '—' : `${row.changePercent > 0 ? '+' : ''}${row.changePercent.toFixed(1)}%`}</td>
                         </tr>
                       ))}
                     </tbody>
