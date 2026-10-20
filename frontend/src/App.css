@@ -1435,9 +1435,16 @@ p {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin-top: 18px;
   color: #8793a5;
   font-size: 8px;
+}
+
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
 }
 
 .chart-legend > span {
@@ -1460,6 +1467,51 @@ p {
 .chart-frequency {
   margin-left: auto;
   color: #657286;
+}
+
+.chart-range-control,
+.chart-range-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.chart-range-control {
+  flex: 0 0 auto;
+  gap: 7px;
+  color: #758296;
+  font-size: 8px;
+}
+
+.chart-range-buttons {
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #252f3d;
+  border-radius: 7px;
+  background: #0d131b;
+}
+
+.chart-range-buttons button {
+  min-width: 31px;
+  height: 23px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  color: #8592a4;
+  background: transparent;
+  font-size: 8px;
+  cursor: pointer;
+  transition: 150ms ease;
+}
+
+.chart-range-buttons button:hover {
+  color: #dce7f5;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chart-range-buttons button.active {
+  color: #a9d0ff;
+  background: rgba(80, 145, 222, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(105, 169, 246, 0.2);
 }
 
 .chart-wrap {
@@ -1901,6 +1953,7 @@ td:first-child strong {
   .mix-legend-row { grid-template-columns: 8px minmax(45px, 1fr) 42px 54px; gap: 5px; font-size: 8px; }
   .mix-legend-row strong { font-size: 8px; }
   .panel { padding: 13px 11px 10px; }
+  .chart-toolbar { align-items: flex-start; flex-direction: column; gap: 11px; }
   .chart-legend { gap: 9px; }
   .chart-frequency { display: none !important; }
   .detail-grid { grid-template-columns: 1fr; }
@@ -1920,5 +1973,8 @@ td:first-child strong {
   .kpi-top { font-size: 8px; }
   .kpi-value { font-size: 21px; }
   .chart-legend { flex-wrap: wrap; }
+  .chart-range-control { width: 100%; justify-content: space-between; }
+  .chart-range-buttons { flex: 1; justify-content: space-between; }
+  .chart-range-buttons button { flex: 1; }
   .select-compact select { width: 110px; }
 }

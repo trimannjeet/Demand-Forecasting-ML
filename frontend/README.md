@@ -26,7 +26,7 @@ Open the local URL printed by Vite, normally `http://localhost:5173`. The API is
 2. Confirm the suggested date and demand columns, using the field hints if needed.
 3. Optionally select a store or product grouping for separate forecasts.
 4. Choose frequency, missing-period behavior, and forecast horizon.
-5. Generate the forecast and compare expected demand with the same number of recent periods, overall and across the largest groups.
+5. Generate the forecast, use the time-range buttons to zoom into recent history and its matching forecast window, and compare expected demand overall and across the largest groups.
 6. Use the group change chart to spot which stores or products may need attention, then review the peak period and data quality.
 7. Export forecast values or the group comparison as CSV.
 

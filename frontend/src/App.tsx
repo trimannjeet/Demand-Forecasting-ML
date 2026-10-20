@@ -115,10 +115,56 @@ type GroupSummary = {
   peakDate: string | null
 }
 type GroupSort = 'forecast' | 'series'
+type ChartRangeKey = 'short' | 'medium' | 'long' | 'extended' | 'all'
+type ChartRangeOption = { key: ChartRangeKey; label: string; periods?: number }
 
 const GROUP_PAGE_SIZE = 8
 
 const chartColors = ['#63a7ff', '#bc8cff', '#48d7b0', '#ffb86b', '#ff718b']
+
+function getChartRangeOptions(frequency: string): ChartRangeOption[] {
+  if (frequency === 'daily') {
+    return [
+      { key: 'short', label: '1W', periods: 7 },
+      { key: 'medium', label: '1M', periods: 30 },
+      { key: 'long', label: '3M', periods: 90 },
+      { key: 'extended', label: '6M', periods: 180 },
+      { key: 'all', label: 'All' },
+    ]
+  }
+  if (frequency === 'monthly') {
+    return [
+      { key: 'short', label: '3M', periods: 3 },
+      { key: 'medium', label: '6M', periods: 6 },
+      { key: 'long', label: '1Y', periods: 12 },
+      { key: 'extended', label: '2Y', periods: 24 },
+      { key: 'all', label: 'All' },
+    ]
+  }
+  return [
+    { key: 'short', label: '1M', periods: 4 },
+    { key: 'medium', label: '3M', periods: 13 },
+    { key: 'long', label: '6M', periods: 26 },
+    { key: 'extended', label: '1Y', periods: 52 },
+    { key: 'all', label: 'All' },
+  ]
+}
+
+function limitChartData(data: ChartPoint[], periods: number | undefined) {
+  if (periods == null) return data
+
+  let lastActualIndex = -1
+  const firstForecastIndex = data.findIndex((point) => point.forecast != null)
+  data.forEach((point, index) => {
+    if (point.actual != null) lastActualIndex = index
+  })
+
+  const startIndex = Math.max(0, lastActualIndex - periods + 1)
+  const endIndex = firstForecastIndex < 0
+    ? data.length
+    : Math.min(data.length, firstForecastIndex + periods)
+  return data.slice(startIndex, Math.max(endIndex, lastActualIndex + 1))
+}
 
 function groupLabel(group: ForecastSeries['group']) {
   const entries = Object.entries(group)
@@ -227,6 +273,7 @@ function App() {
   const [loadingForecast, setLoadingForecast] = useState(false)
   const [error, setError] = useState('')
   const [selectedSeries, setSelectedSeries] = useState('All groups')
+  const [chartRange, setChartRange] = useState<ChartRangeKey>('medium')
   const [groupSearch, setGroupSearch] = useState('')
   const [groupSort, setGroupSort] = useState<GroupSort>('forecast')
   const [groupPage, setGroupPage] = useState(0)
@@ -301,6 +348,10 @@ function App() {
 
     return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date))
   }, [forecast, successful, selectedSeries])
+
+  const chartRangeOptions = getChartRangeOptions(forecast?.frequency ?? 'daily')
+  const chartRangePeriods = chartRangeOptions.find((option) => option.key === chartRange)?.periods
+  const visibleChartData = limitChartData(chartData, chartRangePeriods)
 
   const groupSummary = useMemo<GroupSummary[]>(() => successful.map((result) => {
     const forecastTotal = result.forecast.reduce((sum, point) => sum + Number(point.prediction), 0)
@@ -825,7 +876,7 @@ function App() {
               <div className="dashboard-grid">
                 <article className="panel forecast-panel">
                   <div className="panel-heading">
-                    <div><h3>Demand over time</h3><p>Blue is recorded demand; purple is expected demand. All groups shows their combined total.</p></div>
+                    <div><h3>Demand over time</h3><p>Choose a range to compare recent demand with the matching forecast window. All groups shows the combined total.</p></div>
                     <label className="select-compact">Show
                       <select value={selectedSeries} onChange={(event) => setSelectedSeries(event.target.value)}>
                         <option value="All groups">All groups · combined total</option>
@@ -833,11 +884,29 @@ function App() {
                       </select>
                     </label>
                   </div>
-                  <div className="chart-legend"><span><i className="legend-line actual" /> Recorded</span><span><i className="legend-line predicted" /> Expected</span><span className="chart-frequency">{selectedSeries === 'All groups' ? 'Combined total' : selectedSeries} · {targetColumn}</span></div>
+                  <div className="chart-toolbar">
+                    <div className="chart-legend"><span><i className="legend-line actual" /> Recorded</span><span><i className="legend-line predicted" /> Expected</span><span className="chart-frequency">{selectedSeries === 'All groups' ? 'Combined total' : selectedSeries} · {targetColumn}</span></div>
+                    <div className="chart-range-control" role="group" aria-label="Demand chart time range">
+                      <span className="chart-range-label">View</span>
+                      <div className="chart-range-buttons">
+                        {chartRangeOptions.map((option) => (
+                          <button
+                            type="button"
+                            key={option.key}
+                            className={chartRange === option.key ? 'active' : ''}
+                            aria-pressed={chartRange === option.key}
+                            onClick={() => setChartRange(option.key)}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <div className="chart-wrap">
-                    {chartData.length ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={chartData} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
+                  {visibleChartData.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={visibleChartData} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
                           <defs>
                             <linearGradient id="forecastFill" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#a376ff" stopOpacity={0.2} />
