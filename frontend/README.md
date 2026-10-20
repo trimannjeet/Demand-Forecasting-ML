@@ -26,7 +26,7 @@ Open the local URL printed by Vite, normally `http://localhost:5173`. The API is
 2. Confirm the date and numeric target columns.
 3. Optionally select one or more grouping columns.
 4. Choose frequency, missing-period behavior, and forecast horizon.
-5. Generate the forecast, inspect the historical chart and model evaluation, then export forecast data as CSV.
-6. Review missing values and duplicates in the dataset health panel. Search or sort the group summary by forecast volume, WAPE, or series name, then export the full summary.
+5. Generate the forecast and review expected demand, changes from recent periods, peak periods, and demand by group.
+6. Review missing values and duplicates, then export forecast values or the group summary as CSV.
 
-The dashboard reports holdout model error and forecast values returned by the API. It does not infer inventory, stockout, or service-level metrics unless those capabilities are added to the API.
+Forecasts are based on historical data returned by the API. The dashboard does not infer inventory, stockout, or service-level metrics.

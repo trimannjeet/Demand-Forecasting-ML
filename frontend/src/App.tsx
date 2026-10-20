@@ -14,7 +14,6 @@ import {
   CloudUpload,
   Database,
   FileSpreadsheet,
-  Gauge,
   Layers3,
   PackageCheck,
   RefreshCw,
@@ -107,7 +106,7 @@ type ChartPoint = {
 }
 type PeriodValue = { period: string; value: number }
 type MixValue = { series: string; value: number }
-type GroupSort = 'forecast' | 'wape' | 'series'
+type GroupSort = 'forecast' | 'series'
 
 const GROUP_PAGE_SIZE = 8
 
@@ -125,11 +124,26 @@ function parseDate(value: unknown): Date | null {
   if (typeof value !== 'string') return null
 
   const text = value.trim()
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/)
   const dmy = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/)
-  const parsed = dmy
-    ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
-    : new Date(text)
+  const parsed = iso
+    ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+    : dmy
+      ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
+      : new Date(text)
   return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function formatDateLabel(value: unknown, options: Intl.DateTimeFormatOptions = {}) {
+  const date = parseDate(value)
+  return date
+    ? new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric', ...options }).format(date)
+    : '—'
+}
+
+function periodCountLabel(count: number, frequency: string) {
+  const unit = frequency === 'daily' ? 'day' : frequency === 'weekly' ? 'week' : 'month'
+  return `${count} ${unit}${count === 1 ? '' : 's'}`
 }
 
 function periodDate(value: unknown, frequency: string): string | null {
@@ -280,48 +294,63 @@ function App() {
     return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date))
   }, [forecast, successful, selectedSeries])
 
-  const evaluationRows = useMemo(() => successful.flatMap((result) =>
-    result.evaluation.map((metric) => ({
-      ...metric,
-      series: groupLabel(result.group),
-    })),
-  ), [successful])
-
-  const modelSummary = useMemo(() => {
-    const byModel = new Map<string, { sum: number; count: number }>()
-    for (const row of evaluationRows) {
-      if (row.status !== 'evaluated' || row.wape_percent == null) continue
-      const current = byModel.get(row.model) ?? { sum: 0, count: 0 }
-      current.sum += row.wape_percent
-      current.count += 1
-      byModel.set(row.model, current)
-    }
-    return [...byModel.entries()]
-      .map(([model, stats]) => ({ model, wape: stats.sum / stats.count }))
-      .sort((a, b) => a.wape - b.wape)
-  }, [evaluationRows])
-
-  const bestWape = useMemo(() => {
-    const values = successful.flatMap((result) => {
-      const best = result.evaluation.find(
-        (metric) => metric.model === result.best_model && metric.status === 'evaluated',
-      )
-      return best?.wape_percent == null ? [] : [best.wape_percent]
-    })
-    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
-  }, [successful])
-
   const groupSummary = useMemo(() => successful.map((result) => {
-    const bestMetric = result.evaluation.find((metric) => metric.model === result.best_model)
     const forecastTotal = result.forecast.reduce((sum, point) => sum + Number(point.prediction), 0)
+    const peak = result.forecast.reduce<ForecastPoint | null>(
+      (highest, point) => !highest || point.prediction > highest.prediction ? point : highest,
+      null,
+    )
     return {
       series: groupLabel(result.group),
-      model: result.best_model,
       forecast: forecastTotal,
-      wape: bestMetric?.wape_percent ?? null,
-      horizon: result.horizon,
+      peakDate: peak?.date ?? null,
     }
   }).sort((a, b) => b.forecast - a.forecast), [successful])
+
+  const totalForecast = useMemo(
+    () => successful.reduce(
+      (grandTotal, result) => grandTotal + result.forecast.reduce(
+        (seriesTotal, point) => seriesTotal + Number(point.prediction),
+        0,
+      ),
+      0,
+    ),
+    [successful],
+  )
+
+  const forecastHighlights = useMemo(() => {
+    let forecastTotal = 0
+    let recentTotal = 0
+    const valuesByDate = new Map<string, number>()
+
+    for (const result of successful) {
+      const forecastValues = result.forecast.map((point) => Number(point.prediction))
+      forecastTotal += forecastValues.reduce((sum, value) => sum + value, 0)
+
+      const history = result.history ?? []
+      const comparisonCount = Math.min(history.length, forecastValues.length)
+      if (comparisonCount > 0) {
+        recentTotal += history
+          .slice(-comparisonCount)
+          .reduce((sum, point) => sum + Number(point.value), 0)
+      }
+
+      for (const point of result.forecast) {
+        const date = periodDate(point.date, forecast?.frequency ?? 'daily')
+        if (date) valuesByDate.set(date, (valuesByDate.get(date) ?? 0) + Number(point.prediction))
+      }
+    }
+
+    const peak = [...valuesByDate.entries()].reduce<[string, number] | null>(
+      (highest, current) => !highest || current[1] > highest[1] ? current : highest,
+      null,
+    )
+    const changePercent = recentTotal > 0
+      ? ((forecastTotal - recentTotal) / recentTotal) * 100
+      : null
+
+    return { changePercent, peak }
+  }, [forecast?.frequency, successful])
 
   const forecastByMonth = useMemo<PeriodValue[]>(() => {
     if (!forecast) return []
@@ -377,14 +406,9 @@ function App() {
   const filteredGroupSummary = useMemo(() => {
     const query = groupSearch.trim().toLocaleLowerCase()
     return groupSummary
-      .filter((item) => !query || `${item.series} ${item.model}`.toLocaleLowerCase().includes(query))
+      .filter((item) => !query || item.series.toLocaleLowerCase().includes(query))
       .sort((a, b) => {
         if (groupSort === 'series') return a.series.localeCompare(b.series)
-        if (groupSort === 'wape') {
-          if (a.wape == null) return b.wape == null ? a.series.localeCompare(b.series) : 1
-          if (b.wape == null) return -1
-          return a.wape - b.wape
-        }
         return b.forecast - a.forecast
       })
   }, [groupSearch, groupSort, groupSummary])
@@ -488,7 +512,6 @@ function App() {
       ...result.group,
       date: point.date,
       prediction: point.prediction,
-      model: result.best_model,
     })),
   )
 
@@ -691,7 +714,7 @@ function App() {
               </div>
               <div className="welcome-stats">
                 <div><Database size={17} /><strong>CSV & Excel</strong><span>Simple data upload</span></div>
-                <div><Gauge size={17} /><strong>Model evaluation</strong><span>Compare holdout error</span></div>
+                <div><Activity size={17} /><strong>Understand demand</strong><span>See past and expected trends</span></div>
                 <div><PackageCheck size={17} /><strong>Actionable forecast</strong><span>Download your results</span></div>
               </div>
             </section>
@@ -711,35 +734,31 @@ function App() {
                 <div>
                   <div className="section-kicker">LATEST RUN <span className="live-tag"><span /> COMPLETE</span></div>
                   <h2>Forecast overview</h2>
-                  <p>{forecast.filename} · {forecast.frequency} observations · {forecast.rows_dropped.toLocaleString()} rows excluded</p>
+                  <p>{forecast.filename} · {forecast.frequency} predictions · {forecast.rows_dropped.toLocaleString()} records skipped</p>
                 </div>
                 <button className="button button-secondary" onClick={() => csvDownload('demand_forecast.csv', forecastCsvRows)}><ArrowDownToLine size={15} /> Download CSV</button>
               </div>
 
               <div className="kpi-grid">
                 <article className="kpi-card">
-                  <div className="kpi-top"><span>Forecast demand</span><span className="kpi-icon blue"><ShoppingBasket size={17} /></span></div>
-                  <strong className="kpi-value">{formatCompact(forecastCsvRows.reduce((sum, row) => sum + Number(row.prediction), 0))}</strong>
-                  <span className="kpi-foot">Projected total · {targetColumn}</span>
-                  <div className="sparkline spark-blue"><i /><i /><i /><i /><i /><i /><i /></div>
+                  <div className="kpi-top"><span>Expected demand</span><span className="kpi-icon blue"><ShoppingBasket size={17} /></span></div>
+                  <strong className="kpi-value">{formatCompact(totalForecast)}</strong>
+                  <span className="kpi-foot">Forecast total · {targetColumn}</span>
                 </article>
                 <article className="kpi-card">
-                  <div className="kpi-top"><span>Holdout accuracy</span><span className="kpi-icon green"><Gauge size={17} /></span></div>
-                  <strong className="kpi-value">{bestWape == null ? '—' : `${Math.max(0, 100 - bestWape).toFixed(1)}%`}</strong>
-                  <span className="kpi-foot">{bestWape == null ? 'No holdout metric available' : `Based on ${formatNumber(bestWape)}% average WAPE`}</span>
-                  <div className="sparkline spark-green"><i /><i /><i /><i /><i /><i /><i /></div>
+                  <div className="kpi-top"><span>Demand change</span><span className={`kpi-icon ${forecastHighlights.changePercent != null && forecastHighlights.changePercent < 0 ? 'orange' : 'green'}`}><Activity size={17} /></span></div>
+                  <strong className="kpi-value">{forecastHighlights.changePercent == null ? '—' : `${forecastHighlights.changePercent > 0 ? '+' : ''}${forecastHighlights.changePercent.toFixed(1)}%`}</strong>
+                  <span className="kpi-foot">{forecastHighlights.changePercent == null ? 'Not enough recent data to compare' : `Compared with the previous ${periodCountLabel(successful[0]?.horizon ?? 0, forecast.frequency)}`}</span>
                 </article>
                 <article className="kpi-card">
-                  <div className="kpi-top"><span>Series forecasted</span><span className="kpi-icon purple"><Layers3 size={17} /></span></div>
+                  <div className="kpi-top"><span>Peak demand period</span><span className="kpi-icon purple"><BarChart3 size={17} /></span></div>
+                  <strong className="kpi-value kpi-value-date">{forecastHighlights.peak ? formatDateLabel(forecastHighlights.peak[0], { year: '2-digit' }) : '—'}</strong>
+                  <span className="kpi-foot">{forecastHighlights.peak ? `${formatCompact(forecastHighlights.peak[1])} ${targetColumn} expected` : 'No peak period available'}</span>
+                </article>
+                <article className="kpi-card">
+                  <div className="kpi-top"><span>{forecast.group_columns.length ? 'Groups forecasted' : 'Forecasts completed'}</span><span className="kpi-icon purple"><Layers3 size={17} /></span></div>
                   <strong className="kpi-value">{successful.length}<small> / {forecast.series_count}</small></strong>
-                  <span className="kpi-foot">{failed.length ? `${failed.length} need review` : 'All selected groups completed'}</span>
-                  <div className="sparkline spark-purple"><i /><i /><i /><i /><i /><i /><i /></div>
-                </article>
-                <article className="kpi-card">
-                  <div className="kpi-top"><span>Forecast horizon</span><span className="kpi-icon orange"><Activity size={17} /></span></div>
-                  <strong className="kpi-value">{successful[0]?.horizon ?? 0}<small> periods</small></strong>
-                  <span className="kpi-foot">Future {forecast.frequency} observations</span>
-                  <div className="sparkline spark-orange"><i /><i /><i /><i /><i /><i /><i /></div>
+                  <span className="kpi-foot">{failed.length ? `${failed.length} need review` : 'All selected forecasts completed'}</span>
                 </article>
               </div>
 
@@ -748,15 +767,15 @@ function App() {
               <div className="dashboard-grid">
                 <article className="panel forecast-panel">
                   <div className="panel-heading">
-                    <div><h3>Demand forecast</h3><p>Historical values and model predictions</p></div>
-                    <label className="select-compact">Series
+                    <div><h3>Demand over time</h3><p>Blue is recorded demand; purple is expected demand. All groups shows their combined total.</p></div>
+                    <label className="select-compact">Show
                       <select value={selectedSeries} onChange={(event) => setSelectedSeries(event.target.value)}>
-                        <option>All groups</option>
+                        <option value="All groups">All groups · combined total</option>
                         {successful.map((result) => <option key={groupLabel(result.group)}>{groupLabel(result.group)}</option>)}
                       </select>
                     </label>
                   </div>
-                  <div className="chart-legend"><span><i className="legend-line actual" /> Actual demand</span><span><i className="legend-line predicted" /> Forecast</span><span className="chart-frequency">{forecast.frequency} · {targetColumn}</span></div>
+                  <div className="chart-legend"><span><i className="legend-line actual" /> Recorded</span><span><i className="legend-line predicted" /> Expected</span><span className="chart-frequency">{selectedSeries === 'All groups' ? 'Combined total' : selectedSeries} · {targetColumn}</span></div>
                   <div className="chart-wrap">
                     {chartData.length ? (
                       <ResponsiveContainer width="100%" height="100%">
@@ -768,51 +787,28 @@ function App() {
                             </linearGradient>
                           </defs>
                           <CartesianGrid stroke="#222a36" vertical={false} />
-                          <XAxis dataKey="date" tickFormatter={(date: string) => date.slice(5)} tick={{ fill: '#798598', fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={30} />
+                          <XAxis dataKey="date" tickFormatter={(date: string) => formatDateLabel(date, { year: '2-digit' })} tick={{ fill: '#798598', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={38} />
                           <YAxis tickFormatter={(value: number) => formatCompact(value)} tick={{ fill: '#798598', fontSize: 11 }} axisLine={false} tickLine={false} width={50} />
                           <Tooltip
                             contentStyle={{ background: '#131a25', border: '1px solid #293446', borderRadius: 10, color: '#edf2fb' }}
                             labelStyle={{ color: '#99a5b7', marginBottom: 5 }}
                             formatter={(value, name) => [formatNumber(Number(value)), name === 'actual' ? 'Actual' : 'Forecast']}
-                            labelFormatter={(label) => String(label)}
+                            labelFormatter={(label) => formatDateLabel(label)}
                           />
-                          <Line type="monotone" dataKey="actual" name="actual" stroke="#65a9ff" strokeWidth={2.2} dot={false} activeDot={{ r: 4 }} connectNulls />
-                          <Line type="monotone" dataKey="forecast" name="forecast" stroke="#b68aff" strokeWidth={2.2} strokeDasharray="6 5" dot={false} activeDot={{ r: 4 }} connectNulls />
+                          <Line type="monotone" dataKey="actual" name="actual" stroke="#65a9ff" strokeWidth={2.2} dot={false} activeDot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="forecast" name="forecast" stroke="#b68aff" strokeWidth={2.2} strokeDasharray="6 5" dot={false} activeDot={{ r: 4 }} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     ) : <div className="chart-empty">No chart points for this selection.</div>}
                   </div>
-                  <div className="chart-bottom"><span><span className="chart-dot blue-dot" /> {profile?.rows.toLocaleString()} source rows</span><span><span className="chart-dot purple-dot" /> {successful.length} forecast series</span></div>
-                </article>
-
-                <article className="panel model-panel">
-                  <div className="panel-heading"><div><h3>Model performance</h3><p>Average holdout error · lower is better</p></div><span className="panel-icon"><Gauge size={17} /></span></div>
-                  {modelSummary.length ? (
-                    <>
-                      <div className="model-chart">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={modelSummary} layout="vertical" margin={{ top: 4, right: 16, left: 2, bottom: 0 }}>
-                            <CartesianGrid stroke="#222a36" horizontal={false} />
-                            <XAxis type="number" tick={{ fill: '#798598', fontSize: 10 }} axisLine={false} tickLine={false} />
-                            <YAxis type="category" dataKey="model" width={116} tick={{ fill: '#aab4c3', fontSize: 10 }} axisLine={false} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#131a25', border: '1px solid #293446', borderRadius: 9, color: '#edf2fb' }} formatter={(value) => [`${formatNumber(Number(value))}%`, 'WAPE']} />
-                            <Bar dataKey="wape" radius={[0, 5, 5, 0]} barSize={15}>
-                              {modelSummary.map((entry, index) => <Cell key={entry.model} fill={chartColors[index % chartColors.length]} />)}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="best-model-callout"><span className="best-check"><Check size={13} /></span><span>Best average model</span><strong>{modelSummary[0].model}</strong></div>
-                    </>
-                  ) : <div className="chart-empty">Model comparison metrics are not available for this dataset.</div>}
-                  <div className="model-foot"><span>Metric</span><strong>WAPE</strong><span className="info-dot">i</span></div>
+                  <div className="chart-bottom"><span><span className="chart-dot blue-dot" /> Past {forecast.frequency} demand</span><span><span className="chart-dot purple-dot" /> Future {forecast.frequency} demand</span></div>
                 </article>
               </div>
 
               <div className="visual-grid">
                 <article className="panel visual-panel">
                   <div className="panel-heading">
-                    <div><h3>Forecast volume by month</h3><p>Projected {targetColumn} summed into calendar months</p></div>
+                    <div><h3>Expected demand by month</h3><p>Forecast totals grouped by calendar month</p></div>
                     <span className="panel-icon"><BarChart3 size={16} /></span>
                   </div>
                   {forecastByMonth.length ? (
@@ -849,7 +845,7 @@ function App() {
 
                 <article className="panel visual-panel">
                   <div className="panel-heading">
-                    <div><h3>Historical seasonality</h3><p>Average monthly total across observed years</p></div>
+                    <div><h3>Typical demand by month</h3><p>Average monthly demand in the uploaded history</p></div>
                     <span className="panel-icon season-icon"><Activity size={16} /></span>
                   </div>
                   {seasonalityProfile.some((item) => item.value > 0) ? (
@@ -913,40 +909,42 @@ function App() {
 
               <article className="panel table-panel" id="reports">
                 <div className="panel-heading table-heading table-heading-wrap">
-                  <div><h3>Group forecast summary</h3><p>Forecast totals and best-performing model for each series</p></div>
+                  <div><h3>Demand by group</h3><p>See which stores or products are expected to need the most</p></div>
                   <div className="table-actions">
                     <label className="table-search">
                       <Search size={14} />
                       <input
                         type="search"
                         value={groupSearch}
-                        placeholder="Search groups or models"
-                        aria-label="Search groups or models"
+                        placeholder="Search groups"
+                        aria-label="Search groups"
                         onChange={(event) => { setGroupSearch(event.target.value); setGroupPage(0) }}
                       />
                     </label>
                     <label className="table-sort">Sort
                       <select value={groupSort} onChange={(event) => { setGroupSort(event.target.value as GroupSort); setGroupPage(0) }}>
                         <option value="forecast">Highest forecast</option>
-                        <option value="wape">Lowest WAPE</option>
                         <option value="series">Series name</option>
                       </select>
                     </label>
-                    <button className="button button-quiet" onClick={() => csvDownload('forecast_summary.csv', groupSummary)}><ArrowDownToLine size={14} /> Export table</button>
+                    <button className="button button-quiet" onClick={() => csvDownload('forecast_summary.csv', groupSummary.map((row) => ({
+                      group: row.series,
+                      expected_demand: row.forecast,
+                      share_of_total_percent: totalForecast > 0 ? row.forecast / totalForecast * 100 : 0,
+                      peak_period: row.peakDate,
+                    })))}><ArrowDownToLine size={14} /> Export table</button>
                   </div>
                 </div>
                 <div className="table-scroll">
                   <table>
-                    <thead><tr><th>Series</th><th>Selected model</th><th>Forecast total</th><th>Holdout WAPE</th><th>Horizon</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Group</th><th>Expected demand</th><th>Share of total</th><th>Peak period</th></tr></thead>
                     <tbody>
                       {paginatedGroupSummary.map((row, index) => (
                         <tr key={row.series}>
                           <td><span className={`table-avatar avatar-${index % 4}`}>{row.series.split(': ').at(-1)?.slice(0, 2).toUpperCase() ?? 'OV'}</span><strong>{row.series}</strong></td>
-                          <td>{row.model}</td>
                           <td className="number-cell">{formatNumber(row.forecast)}</td>
-                          <td className="number-cell">{row.wape == null ? '—' : `${formatNumber(row.wape)}%`}</td>
-                          <td>{row.horizon} periods</td>
-                          <td><span className="status-complete"><span /> Complete</span></td>
+                          <td className="number-cell">{totalForecast > 0 ? `${(row.forecast / totalForecast * 100).toFixed(1)}%` : '—'}</td>
+                          <td>{formatDateLabel(row.peakDate)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -991,7 +989,7 @@ function App() {
                 </article>
                 <article className="panel detail-panel export-panel">
                   <div className="export-illustration"><FileSpreadsheet size={22} /></div>
-                  <div className="export-copy"><h3>Take your forecast with you</h3><p>Download forecasted values and model evaluation to share or analyze further.</p></div>
+                  <div className="export-copy"><h3>Take your forecast with you</h3><p>Download expected demand by date and group to share or use in your planning.</p></div>
                   <button className="button button-primary" onClick={() => csvDownload('demand_forecast.csv', forecastCsvRows)}><ArrowDownToLine size={15} /> Export CSV</button>
                 </article>
               </div>
