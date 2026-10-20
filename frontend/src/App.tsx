@@ -36,6 +36,7 @@ import {
   Pie,
   PieChart,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -106,6 +107,13 @@ type ChartPoint = {
 }
 type PeriodValue = { period: string; value: number }
 type MixValue = { series: string; value: number }
+type GroupSummary = {
+  series: string
+  forecast: number
+  recent: number | null
+  changePercent: number | null
+  peakDate: string | null
+}
 type GroupSort = 'forecast' | 'series'
 
 const GROUP_PAGE_SIZE = 8
@@ -294,7 +302,7 @@ function App() {
     return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date))
   }, [forecast, successful, selectedSeries])
 
-  const groupSummary = useMemo(() => successful.map((result) => {
+  const groupSummary = useMemo<GroupSummary[]>(() => successful.map((result) => {
     const forecastTotal = result.forecast.reduce((sum, point) => sum + Number(point.prediction), 0)
     const peak = result.forecast.reduce<ForecastPoint | null>(
       (highest, point) => !highest || point.prediction > highest.prediction ? point : highest,
@@ -412,6 +420,17 @@ function App() {
   }, [groupSummary])
 
   const groupComparison = useMemo(() => groupSummary.slice(0, 8), [groupSummary])
+
+  const biggestGroupChanges = useMemo(() => groupSummary
+    .filter((item): item is GroupSummary & { changePercent: number } => item.changePercent != null)
+    .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))
+    .slice(0, 10)
+    .sort((a, b) => a.changePercent - b.changePercent), [groupSummary])
+
+  const groupChangeAxisLimit = Math.max(
+    5,
+    Math.ceil(Math.max(...biggestGroupChanges.map((item) => Math.abs(item.changePercent)), 0) / 5) * 5,
+  )
 
   const comparisonPeriods = successful[0]?.horizon ?? 0
   const changePercent = forecastHighlights.changePercent
@@ -872,6 +891,44 @@ function App() {
               </div>
 
               <div className="visual-grid">
+                {forecast.group_columns.length > 0 && biggestGroupChanges.length > 0 && (
+                  <article className="panel visual-panel change-panel">
+                    <div className="panel-heading">
+                      <div><h3>Biggest changes by group</h3><p>Groups with the largest rise or drop compared with recent demand</p></div>
+                      <span className="panel-icon"><Activity size={16} /></span>
+                    </div>
+                    <div className="change-legend">
+                      <span><i className="change-swatch decrease" /> Lower</span>
+                      <span><i className="change-swatch increase" /> Higher</span>
+                    </div>
+                    <div className="change-chart">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={biggestGroupChanges} layout="vertical" margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+                          <CartesianGrid stroke="#222a36" horizontal={false} />
+                          <XAxis
+                            type="number"
+                            domain={[-groupChangeAxisLimit, groupChangeAxisLimit]}
+                            tickFormatter={(value: number) => `${value}%`}
+                            tick={{ fill: '#798598', fontSize: 9 }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <YAxis type="category" dataKey="series" width={86} tick={{ fill: '#aab4c3', fontSize: 9 }} axisLine={false} tickLine={false} />
+                          <ReferenceLine x={0} stroke="#687587" strokeDasharray="3 3" />
+                          <Tooltip
+                            contentStyle={{ background: '#131a25', border: '1px solid #293446', borderRadius: 9, color: '#edf2fb' }}
+                            formatter={(value) => [`${Number(value) > 0 ? '+' : ''}${formatNumber(Number(value))}%`, 'Change in demand']}
+                          />
+                          <Bar dataKey="changePercent" name="changePercent" radius={[0, 4, 4, 0]} barSize={13}>
+                            {biggestGroupChanges.map((item) => (
+                              <Cell key={item.series} fill={item.changePercent < 0 ? '#ffb86b' : '#48d7b0'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </article>
+                )}
                 <article className="panel visual-panel">
                   <div className="panel-heading">
                     <div><h3>Expected demand by month</h3><p>Forecast totals grouped by calendar month</p></div>
