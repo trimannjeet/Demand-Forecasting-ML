@@ -23,10 +23,10 @@ Open the local URL printed by Vite, normally `http://localhost:5173`. The API is
 ## Workflow
 
 1. Upload a CSV, XLSX, or XLS dataset.
-2. Confirm the date and numeric target columns.
-3. Optionally select one or more grouping columns.
+2. Confirm the suggested date and demand columns, using the field hints if needed.
+3. Optionally select a store or product grouping for separate forecasts.
 4. Choose frequency, missing-period behavior, and forecast horizon.
-5. Generate the forecast and review expected demand, changes from recent periods, peak periods, and demand by group.
+5. Generate the forecast and read the plain-language summary of expected demand, its change from recent periods, the peak period, and the largest group contributor.
 6. Review missing values and duplicates, then export forecast values or the group summary as CSV.
 
 Forecasts are based on historical data returned by the API. The dashboard does not infer inventory, stockout, or service-level metrics.

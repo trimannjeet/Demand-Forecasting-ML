@@ -19,7 +19,7 @@ The project includes a **FastAPI backend**, an interactive **Streamlit dashboard
 - **Rolling-origin backtesting:** Evaluates models using chronological validation windows.
 - **Forecast horizon selection:** Supports a custom horizon or forecasting through the next calendar year.
 - **Performance metrics:** Calculates MAE, RMSE, sMAPE, and WAPE.
-- **Interactive dashboards:** Explore historical data, forecasts, model metrics, data quality, and group summaries.
+- **Interactive dashboards:** Explore recorded and expected demand, plain-language forecast summaries, peak periods, data quality, and group demand.
 - **CSV exports:** Download forecast results and group summaries.
 - **Automated tests:** Covers the API, data preparation, and forecasting functionality.
 
@@ -72,7 +72,7 @@ DemandForecasting/
 5. Compare forecasting models using chronological backtesting.
 6. Select the best eligible model based on validation MAE and RMSE.
 7. Generate predictions for the requested forecast horizon.
-8. Explore the results in either dashboard and export forecast data as CSV.
+8. Review the forecast summary in plain language, explore demand by date and group, and export results as CSV.
 
 ## Forecasting Models
 

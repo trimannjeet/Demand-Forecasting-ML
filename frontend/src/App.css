@@ -582,6 +582,23 @@ p {
   font-weight: 610;
 }
 
+.field-recommendation {
+  margin-left: 5px;
+  color: #6fb8ff;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 550;
+}
+
+.field-help,
+.group-help {
+  margin: 0;
+  color: #748195;
+  font-size: 8px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .field select,
 .select-compact select,
 .horizon-input input {
@@ -627,6 +644,11 @@ p {
   color: #aeb9c8;
   font-size: 9px;
   font-weight: 620;
+}
+
+.group-help {
+  max-width: 460px;
+  margin: -3px 0 9px;
 }
 
 .field-caption > span {
@@ -1118,6 +1140,44 @@ p {
   overflow: auto;
   max-height: 120px;
   white-space: pre-wrap;
+}
+
+.plain-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(101, 169, 255, 0.2);
+  border-radius: 9px;
+  background: linear-gradient(110deg, rgba(41, 91, 151, 0.15), rgba(18, 25, 36, 0.9));
+}
+
+.plain-summary-icon {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(101, 169, 255, 0.2);
+  border-radius: 8px;
+  color: #8fc1ff;
+  background: rgba(75, 139, 218, 0.12);
+}
+
+.plain-summary strong {
+  display: block;
+  margin: 1px 0 5px;
+  color: #dce7f5;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.plain-summary p {
+  margin: 0;
+  color: #9baabd;
+  font-size: 9px;
+  line-height: 1.65;
 }
 
 .dashboard-grid {

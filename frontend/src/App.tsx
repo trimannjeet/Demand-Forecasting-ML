@@ -403,6 +403,18 @@ function App() {
     return topGroups
   }, [groupSummary])
 
+  const comparisonPeriods = successful[0]?.horizon ?? 0
+  const changePercent = forecastHighlights.changePercent
+  const demandDirection = changePercent == null
+    ? 'There is not enough recent history to compare demand.'
+    : Math.abs(changePercent) < 1
+      ? `Demand is expected to stay about the same (${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}%) as the previous ${periodCountLabel(comparisonPeriods, forecast?.frequency ?? 'daily')}.`
+      : `Demand is expected to be ${Math.abs(changePercent).toFixed(1)}% ${changePercent > 0 ? 'higher' : 'lower'} than the previous ${periodCountLabel(comparisonPeriods, forecast?.frequency ?? 'daily')}.`
+  const leadingGroup = forecast?.group_columns.length ? groupSummary[0] : null
+  const leadingGroupShare = leadingGroup && totalForecast > 0
+    ? leadingGroup.forecast / totalForecast * 100
+    : null
+
   const filteredGroupSummary = useMemo(() => {
     const query = groupSearch.trim().toLocaleLowerCase()
     return groupSummary
@@ -634,18 +646,20 @@ function App() {
               <form onSubmit={generateForecast}>
                 <div className="config-grid">
                   <label className="field">
-                    <span>Date column</span>
+                    <span>Date column {dateColumn && dateColumn === profile.suggestions.suggested_date_column && <em className="field-recommendation">Suggested</em>}</span>
                     <select value={dateColumn} onChange={(event) => { setDateColumn(event.target.value); setGroupColumns((current) => current.filter((item) => item !== event.target.value)) }}>
                       <option value="">Select date field</option>
                       {(dateCandidates.length ? dateCandidates : columns).map((column) => <option key={column.name} value={column.name}>{column.name}</option>)}
                     </select>
+                    <small className="field-help">Choose when each sale or observation happened.</small>
                   </label>
                   <label className="field">
-                    <span>Forecast target</span>
+                    <span>Demand column {targetColumn && targetColumn === profile.suggestions.suggested_target_column && <em className="field-recommendation">Suggested</em>}</span>
                     <select value={targetColumn} onChange={(event) => { setTargetColumn(event.target.value); setGroupColumns((current) => current.filter((item) => item !== event.target.value)) }}>
                       <option value="">Select numeric target</option>
                       {(targetCandidates.length ? targetCandidates : columns).map((column) => <option key={column.name} value={column.name}>{column.name}</option>)}
                     </select>
+                    <small className="field-help">Choose the number to predict, such as sales or units.</small>
                   </label>
                   <label className="field">
                     <span>Data frequency</span>
@@ -655,6 +669,7 @@ function App() {
                       <option value="weekly">Weekly</option>
                       <option value="monthly">Monthly</option>
                     </select>
+                    <small className="field-help">Auto-detect uses the spacing between dates.</small>
                   </label>
                   <label className="field">
                     <span>Missing periods</span>
@@ -662,11 +677,13 @@ function App() {
                       <option value="zero">Fill with zero</option>
                       <option value="keep">Keep missing</option>
                     </select>
+                    <small className="field-help">Missing periods are gaps between dates, not blank cells.</small>
                   </label>
                 </div>
                 <div className="config-lower">
                   <div className="group-field">
-                    <div className="field-caption">Group series by <span>Optional</span></div>
+                    <div className="field-caption">Separate forecasts by <span>Optional</span></div>
+                    <p className="group-help">Choose a store or product for a forecast per group. Leave empty for one combined forecast.</p>
                     <div className="group-options">
                       {groupCandidates.length ? groupCandidates.slice(0, 8).map((column) => (
                         <label className={`group-chip ${groupColumns.includes(column.name) ? 'selected' : ''}`} key={column.name}>
@@ -686,7 +703,7 @@ function App() {
                       <span>One calendar year</span>
                     </label>
                     {!oneCalendarYear && (
-                      <label className="horizon-input">Periods
+                      <label className="horizon-input">Number of {frequency === 'daily' ? 'days' : frequency === 'monthly' ? 'months' : frequency === 'weekly' ? 'weeks' : 'periods'}
                         <input type="number" min={1} max={5000} value={horizon} onChange={(event) => setHorizon(Number(event.target.value))} />
                       </label>
                     )}
@@ -763,6 +780,18 @@ function App() {
               </div>
 
               {failed.length > 0 && <div className="partial-warning"><AlertCircle size={16} /><span>{failed.length} series could not be forecast.</span><details><summary>Review issues</summary><pre>{failed.map((item) => `${groupLabel(item.group)}: ${item.error}`).join('\n')}</pre></details></div>}
+
+              <section className="plain-summary" aria-label="Forecast summary in plain language">
+                <span className="plain-summary-icon"><Sparkles size={16} /></span>
+                <div>
+                  <strong>In plain language</strong>
+                  <p>
+                    {`About ${formatNumber(totalForecast)} ${targetColumn} are expected over the next ${periodCountLabel(comparisonPeriods, forecast.frequency)}. ${demandDirection}`}
+                    {forecastHighlights.peak && ` The busiest forecast period is ${formatDateLabel(forecastHighlights.peak[0])}, with about ${formatNumber(forecastHighlights.peak[1])} ${targetColumn} expected.`}
+                    {leadingGroup && leadingGroupShare != null && ` ${leadingGroup.series} has the largest forecast share at ${leadingGroupShare.toFixed(1)}%.`}
+                  </p>
+                </div>
+              </section>
 
               <div className="dashboard-grid">
                 <article className="panel forecast-panel">
