@@ -29,6 +29,21 @@ def test_health_endpoint():
     assert response.status_code == 200
 
 
+def test_render_frontend_origin_is_allowed_by_cors():
+    response = client.options(
+        "/profile",
+        headers={
+            "Origin": "https://demand-forecasting-ml-1.onrender.com",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://demand-forecasting-ml-1.onrender.com"
+    )
+
+
 def test_profile_endpoint():
     response = client.post(
         "/profile",
