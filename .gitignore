@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Frontend
+node_modules/
+dist/
+*.local
+
+# Generated outputs and notebooks
+outputs/*
+!outputs/.gitkeep
+notebooks/outputs/*
+!notebooks/outputs/.gitkeep
+.ipynb_checkpoints/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
